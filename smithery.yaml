@@ -1,0 +1,37 @@
+name: sparkient
+displayName: Sparkient
+description: >-
+  Make structured decisions in under 100ms — faster than any LLM API call.
+  Define any decision type your app needs, train a lightweight ML model from
+  AI-generated examples, and get instant decisions with confidence scores and
+  reason codes. No ML team or historical data required. From moderation to
+  routing to fraud — if an LLM can judge it, Sparkient can compile it.
+version: 1.0.0
+author: Sparkient
+repository: https://github.com/sparkient/sparkient-mcp-server
+homepage: https://sparkient.ai
+icon: https://sparkient.ai/icon.png
+tags:
+  - decision-intelligence
+  - machine-learning
+  - content-moderation
+  - classification
+  - ai-agents
+  - sub-100ms
+  - onnx
+  - edge-inference
+
+startCommand:
+  type: http
+  url: https://mcp.sparkient.ai/mcp
+  configSchema:
+    type: object
+    properties:
+      apiKey:
+        type: string
+        title: Sparkient API Key
+        description: >-
+          Your Sparkient API key (starts with sk-). Get one free at
+          https://app.sparkient.ai/settings. Required for making API calls.
+  headers:
+    Authorization: "Bearer {{apiKey}}"
