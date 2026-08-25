@@ -171,7 +171,7 @@ tools = tool_spec.to_tool_list()  # All 15 Sparkient tools ready to use
 For local decisions with no network dependency after bundle download, use the edge MCP server and benchmark it on the target hardware:
 
 ```bash
-pip install "sparkient-edge[mcp]"
+pip install "sparkient-edge[all]"
 ```
 
 Claude Desktop config:
