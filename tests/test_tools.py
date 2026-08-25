@@ -9,6 +9,7 @@ import pytest
 
 import sparkient_mcp.client as client_mod
 from sparkient_mcp.client import _request_client, set_request_client
+from sparkient_mcp.resources.decision_types import get_decision_type_by_id
 from sparkient_mcp.server import mcp
 from sparkient_mcp.tools.decide import batch_decisions, make_decision
 from sparkient_mcp.tools.decision_types import (
@@ -73,6 +74,18 @@ def _mock_client():
 
 
 # ── Decide tools ────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_decision_type_resource_uses_backend_uuid_contract(
+    _mock_client: AsyncMock,
+) -> None:
+    decision_type_id = "0f7b86c4-2dc9-4e79-9d43-3ee3217fceef"
+
+    result = await get_decision_type_by_id(decision_type_id)
+
+    _mock_client.get_decision_type.assert_awaited_once_with(decision_type_id)
+    assert '"id": "abc"' in result
 
 
 @pytest.mark.asyncio

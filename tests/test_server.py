@@ -7,6 +7,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
+from jsonschema import Draft202012Validator, FormatChecker
 
 from sparkient_mcp.server import (
     _SERVER_CARD_ETAG,
@@ -36,6 +37,23 @@ EXPECTED_TOOLS = {
     "get_credits",
     "get_edge_export_instructions",
 }
+
+SERVER_CARD_SCHEMA_COMMIT = "526201bbc80231daa40ffcdecfc9da4e54e5dc93"
+
+
+def _validate_server_card(body: dict) -> None:
+    """Validate against the pinned upstream experimental v1 schema snapshot."""
+    schema_path = Path(__file__).parent / "fixtures" / "server-card-v1.schema.json"
+    upstream_schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    validation_schema = {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$ref": "#/$defs/ServerCard",
+        "$defs": upstream_schema["$defs"],
+    }
+    Draft202012Validator(
+        validation_schema,
+        format_checker=FormatChecker(),
+    ).validate(body)
 
 
 class TestServerInstance:
@@ -77,8 +95,9 @@ async def test_server_card_routes_return_advertised_media_type(handler) -> None:
     assert response.media_type == "application/mcp-server-card+json"
     body = json.loads(response.body)
     assert body["$schema"] == (
-        "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json"
+        "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json"
     )
+    _validate_server_card(body)
     assert body["name"] == "ai.sparkient/sparkient"
     assert body["title"] == "Sparkient"
     assert body["remotes"][0]["url"] == "https://mcp.sparkient.ai/mcp"
@@ -87,7 +106,10 @@ async def test_server_card_routes_return_advertised_media_type(handler) -> None:
     assert response.headers["access-control-allow-origin"] == "*"
     assert response.headers["cache-control"] == "public, max-age=3600"
     assert response.headers["etag"] == _SERVER_CARD_ETAG
-    assert "repository" not in body
+    assert body["repository"] == {
+        "source": "github",
+        "url": "https://github.com/Sparkient/sparkient-mcp-server",
+    }
 
 
 def test_server_card_honours_matching_etag() -> None:

@@ -28,7 +28,7 @@ log = structlog.get_logger()
 
 _port = int(os.environ.get("PORT", "8080"))
 _SERVER_NAME = "ai.sparkient/sparkient"
-_SERVER_VERSION = "1.0.2"
+_SERVER_VERSION = "1.0.3"
 
 mcp = FastMCP(
     _SERVER_NAME,
@@ -92,7 +92,7 @@ async def health(request: Request) -> JSONResponse:
 
 
 _SERVER_CARD = {
-    "$schema": ("https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json"),
+    "$schema": "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json",
     "name": _SERVER_NAME,
     "title": "Sparkient",
     "description": (
@@ -100,6 +100,10 @@ _SERVER_CARD = {
         "for applications and agents."
     ),
     "websiteUrl": "https://sparkient.ai",
+    "repository": {
+        "source": "github",
+        "url": "https://github.com/Sparkient/sparkient-mcp-server",
+    },
     "icons": [
         {
             "src": "https://sparkient.ai/icon.png",
@@ -158,13 +162,13 @@ def _server_card_response(request: Request | None = None) -> Response:
 
 @mcp.custom_route("/.well-known/mcp.json", methods=["GET"])
 async def server_card(request: Request) -> Response:
-    """MCP server card for registry discovery (standard path)."""
+    """Compatibility alias retained for existing directory integrations."""
     return _server_card_response(request)
 
 
 @mcp.custom_route("/.well-known/mcp/server-card.json", methods=["GET"])
 async def server_card_alt(request: Request) -> Response:
-    """MCP server card for registry discovery (Smithery path)."""
+    """Compatibility alias retained for existing directory integrations."""
     return _server_card_response(request)
 
 

@@ -110,11 +110,11 @@ Example capacity is explicit: each decision type stores up to 5,000 examples, wh
 | URI | Description |
 |-----|-------------|
 | `sparkient://decision-types` | List all decision types (for agent discovery) |
-| `sparkient://decision-types/{name}` | Full schema of a specific decision type |
+| `sparkient://decision-types/{decision_type_id}` | Full schema of a specific decision type by UUID |
 
 ## Discovery
 
-The authoritative machine-readable contract is the live server card at [`https://mcp.sparkient.ai/.well-known/mcp/server-card.json`](https://mcp.sparkient.ai/.well-known/mcp/server-card.json). Third-party directory pages, including [Smithery](https://smithery.ai/servers/sparkient/sparkient), are independently cached mirrors and can lag a release; verify their displayed tools and claims against the server card before relying on them.
+Sparkient advertises experimental discovery metadata through its AI Catalog and MCP Server Card at [`https://mcp.sparkient.ai/mcp/server-card`](https://mcp.sparkient.ai/mcp/server-card). The card is advisory; the authenticated live MCP connection is authoritative for runtime identity and capabilities. The two `/.well-known/mcp...` routes are compatibility aliases, not standard card-discovery locations. Third-party directory pages, including [Smithery](https://smithery.ai/servers/sparkient/sparkient), are independently cached mirrors and can lag a release; verify their displayed tools and claims against the live connection before relying on them.
 
 ### Smithery Configuration
 

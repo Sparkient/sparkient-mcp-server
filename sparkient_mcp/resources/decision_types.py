@@ -37,16 +37,16 @@ async def list_all_decision_types() -> str:
     return json.dumps(summaries, indent=2)
 
 
-@mcp.resource("sparkient://decision-types/{name}")
-async def get_decision_type_by_name(name: str) -> str:
-    """Get the full configuration of a specific decision type by name.
+@mcp.resource("sparkient://decision-types/{decision_type_id}")
+async def get_decision_type_by_id(decision_type_id: str) -> str:
+    """Get the full configuration of a specific decision type by UUID.
 
     Returns the complete schema including options, reason codes,
     rules, input schema, and training status.
 
     Args:
-        name: Name or UUID of the decision type.
+        decision_type_id: UUID returned by the list resource or list tool.
     """
     client = get_client()
-    data = await client.get_decision_type(name)
+    data = await client.get_decision_type(decision_type_id)
     return json.dumps(data, indent=2)
