@@ -7,8 +7,8 @@ from typing import Annotated, Any
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
-from sparkient_mcp.server import mcp
 from sparkient_mcp.client import get_client
+from sparkient_mcp.server import mcp
 
 
 @mcp.tool(
@@ -36,8 +36,9 @@ async def add_examples(
 ) -> dict[str, Any]:
     """Add labelled training examples to a decision type.
 
-    More examples improve model accuracy. Aim for at least 50 examples
-    per option, with balanced class distribution.
+    More examples can improve model accuracy. Aim for at least 50 examples
+    per option, with balanced class distribution. A decision type can store
+    up to 5,000 examples; capacity errors report the exact remaining space.
     """
     client = get_client()
     return await client.add_examples(decision_type_id, examples)
@@ -65,7 +66,9 @@ async def generate_examples(
 
     Uses the decision type's description and options to generate
     realistic labelled examples. Good for bootstrapping a new
-    decision type before you have real data.
+    decision type before you have real data. Generation is all-or-nothing:
+    Sparkient returns the remaining capacity instead of silently creating
+    fewer examples than requested.
     """
     client = get_client()
     return await client.generate_examples(decision_type_id, count)

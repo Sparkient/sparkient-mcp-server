@@ -2,25 +2,31 @@
 
 from __future__ import annotations
 
+import inspect
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 import sparkient_mcp.client as client_mod
-from sparkient_mcp.tools.decide import make_decision, batch_decisions
+from sparkient_mcp.client import _request_client, set_request_client
+from sparkient_mcp.tools.decide import batch_decisions, make_decision
 from sparkient_mcp.tools.decision_types import (
-    list_decision_types,
-    get_decision_type,
     create_decision_type,
+    get_decision_type,
+    list_decision_types,
 )
 from sparkient_mcp.tools.examples import add_examples, generate_examples
-from sparkient_mcp.tools.training import train_model
 from sparkient_mcp.tools.introspect import get_decision_logs, get_metrics
+from sparkient_mcp.tools.training import cancel_training, retry_training, train_model
 
 
 @pytest.fixture(autouse=True)
 def _mock_client():
-    """Inject a mocked SparkientClient for every test."""
+    """Inject a mocked SparkientClient for every test.
+
+    Sets the per-request context variable (simulating AuthMiddleware)
+    and also patches the module singleton for backward compatibility.
+    """
     mock = AsyncMock()
     mock.decide.return_value = {
         "decision": "approve",
@@ -35,11 +41,21 @@ def _mock_client():
     mock.add_examples.return_value = {"added": 5}
     mock.generate_examples.return_value = {"generated": 10}
     mock.train_model.return_value = {"status": "accepted", "job_id": "j-1"}
+    mock.cancel_training.return_value = {"status": "cancelled", "id": "policy-1"}
+    mock.retry_training.return_value = {
+        "status": "training",
+        "policy_id": "policy-1",
+        "dataset": {"manifest_id": "sha256:test"},
+    }
     mock.get_decision_logs.return_value = {"items": [], "total": 0}
     mock.get_metrics.return_value = {"total_decisions": 100}
 
+    # Set via context variable (how stateless HTTP mode works)
+    set_request_client(mock)
     with patch.object(client_mod, "_client", mock):
         yield mock
+    # Reset the context variable after each test
+    _request_client.set(None)
 
 
 # ── Decide tools ────────────────────────────────────────────────────────
@@ -66,6 +82,40 @@ async def test_batch_decisions(_mock_client: AsyncMock) -> None:
     assert "results" in result
 
 
+@pytest.mark.asyncio
+async def test_batch_decisions_surfaces_null_with_matching_error(
+    _mock_client: AsyncMock,
+) -> None:
+    """The tool must expose an item failure, not present null as a decision."""
+    partial = {
+        "results": [{"decision": "allow"}, None],
+        "errors": [
+            {
+                "index": 1,
+                "decision_type": "mod",
+                "code": "internal_error",
+                "message": "An internal error occurred while processing this item.",
+                "status_code": 500,
+                "retryable": True,
+                "request_id": "item-2",
+            }
+        ],
+        "succeeded": 1,
+        "failed": 1,
+    }
+    _mock_client.batch_decide.return_value = partial
+    items = [
+        {"decision_type": "mod", "input": {"text": "a"}},
+        {"decision_type": "mod", "input": {"text": "b"}},
+    ]
+
+    result = await batch_decisions(items)
+
+    assert result == partial
+    assert result["results"][1] is None
+    assert result["errors"][0]["index"] == 1
+
+
 # ── Decision type tools ─────────────────────────────────────────────────
 
 
@@ -87,9 +137,34 @@ async def test_get_decision_type(_mock_client: AsyncMock) -> None:
 async def test_create_decision_type(_mock_client: AsyncMock) -> None:
     result = await create_decision_type("test", "A test type", ["yes", "no"])
     _mock_client.create_decision_type.assert_awaited_once_with(
-        "test", "A test type", ["yes", "no"], None, None
+        "test", "A test type", ["yes", "no"], None, None, False, 0.7, None
     )
     assert result["id"] == "new-id"
+
+
+@pytest.mark.asyncio
+async def test_create_decision_type_can_enable_escalation(
+    _mock_client: AsyncMock,
+) -> None:
+    await create_decision_type(
+        "test",
+        "A test type",
+        ["yes", "no"],
+        escalation_enabled=True,
+        escalate_below=0.4,
+        per_option_thresholds={"no": 0.9},
+    )
+
+    _mock_client.create_decision_type.assert_awaited_once_with(
+        "test",
+        "A test type",
+        ["yes", "no"],
+        None,
+        None,
+        True,
+        0.4,
+        {"no": 0.9},
+    )
 
 
 # ── Example tools ───────────────────────────────────────────────────────
@@ -115,9 +190,34 @@ async def test_generate_examples(_mock_client: AsyncMock) -> None:
 
 @pytest.mark.asyncio
 async def test_train_model(_mock_client: AsyncMock) -> None:
-    result = await train_model("abc", preset="fast", auto_deploy=False)
-    _mock_client.train_model.assert_awaited_once_with("abc", "fast", False)
+    result = await train_model("abc", auto_deploy=False)
+    _mock_client.train_model.assert_awaited_once_with("abc", False)
     assert result["status"] == "accepted"
+
+
+def test_train_model_does_not_expose_training_presets() -> None:
+    assert "preset" not in inspect.signature(train_model).parameters
+
+
+@pytest.mark.asyncio
+async def test_cancel_training_targets_exact_policy(
+    _mock_client: AsyncMock,
+) -> None:
+    result = await cancel_training("dt-1", "policy-1")
+
+    _mock_client.cancel_training.assert_awaited_once_with("dt-1", "policy-1")
+    assert result["status"] == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_retry_training_preserves_policy_and_snapshot(
+    _mock_client: AsyncMock,
+) -> None:
+    result = await retry_training("dt-1", "policy-1")
+
+    _mock_client.retry_training.assert_awaited_once_with("dt-1", "policy-1")
+    assert result["policy_id"] == "policy-1"
+    assert result["dataset"]["manifest_id"] == "sha256:test"
 
 
 # ── Introspection tools ────────────────────────────────────────────────

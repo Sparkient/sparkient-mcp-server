@@ -4,6 +4,8 @@ COPY pyproject.toml .
 RUN pip install --no-cache-dir .
 
 FROM python:3.12-slim
+RUN apt-get update && apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/*
 RUN useradd --create-home --uid 1001 appuser
 COPY --from=builder /usr/local/lib/python3.12 /usr/local/lib/python3.12
 COPY --from=builder /usr/local/bin /usr/local/bin

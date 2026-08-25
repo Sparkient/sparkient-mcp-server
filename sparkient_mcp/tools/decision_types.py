@@ -7,8 +7,8 @@ from typing import Annotated, Any
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
-from sparkient_mcp.server import mcp
 from sparkient_mcp.client import get_client
+from sparkient_mcp.server import mcp
 
 
 @mcp.tool(
@@ -93,7 +93,32 @@ async def create_decision_type(
     ] = None,
     rules: Annotated[
         list[dict[str, Any]] | None,
-        Field(description="Optional CEL rules for deterministic decisions."),
+        Field(description="Optional expression rules for deterministic decisions."),
+    ] = None,
+    escalation_enabled: Annotated[
+        bool,
+        Field(
+            description=(
+                "Allow metered live-LLM escalation for low-confidence cases. "
+                "Defaults to false for classifier-only operation."
+            )
+        ),
+    ] = False,
+    escalate_below: Annotated[
+        float,
+        Field(
+            ge=0.0,
+            le=1.0,
+            description="Global confidence threshold below which review is required.",
+        ),
+    ] = 0.7,
+    per_option_thresholds: Annotated[
+        dict[str, float] | None,
+        Field(
+            description=(
+                "Optional confidence thresholds keyed by configured decision option."
+            )
+        ),
     ] = None,
 ) -> dict[str, Any]:
     """Create a new decision type.
@@ -103,5 +128,12 @@ async def create_decision_type(
     """
     client = get_client()
     return await client.create_decision_type(
-        name, description, options, reason_codes, rules
+        name,
+        description,
+        options,
+        reason_codes,
+        rules,
+        escalation_enabled,
+        escalate_below,
+        per_option_thresholds,
     )

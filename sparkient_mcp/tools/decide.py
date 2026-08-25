@@ -7,8 +7,8 @@ from typing import Annotated, Any
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
-from sparkient_mcp.server import mcp
 from sparkient_mcp.client import get_client
+from sparkient_mcp.server import mcp
 
 
 @mcp.tool(
@@ -30,19 +30,20 @@ async def make_decision(
     ],
     request_id: Annotated[
         str | None,
-        Field(description="Optional idempotency key for deduplication."),
+        Field(description="Optional correlation ID sent as X-Request-ID."),
     ] = None,
 ) -> dict[str, Any]:
-    """Make a structured decision in under 100ms.
+    """Make a structured decision through the Sparkient pipeline.
 
     Requires a trained and deployed model for the given decision type.
     If no model is deployed, the API returns 428 (model_not_deployed).
     Use train_model to train and deploy a model first.
 
     The decision goes through a multi-stage pipeline:
-      1. CEL rules — deterministic, <1ms
-      2. ML classifier — ONNX model, <10ms
-      3. LLM escalation — Gemini fallback, only if low confidence
+      1. CEL rules — deterministic and usually sub-millisecond
+      2. Compiled classifier — under-100ms target; four public synthetic
+         domains measured 33–42ms average time per item in batched runs
+      3. Optional LLM escalation — only for configured low-confidence cases
 
     Every decision returns: decision, confidence, reason_codes,
     latency_ms, stage, and whether it was escalated.
@@ -65,8 +66,13 @@ async def batch_decisions(
         Field(
             description=(
                 "List of decision requests. Each item should have: "
-                "decision_type (str), input_data (dict), and optionally request_id (str)."
-            )
+                "decision_type (str), input (dict), and optionally latency_budget_ms. "
+                "The input_data alias is also accepted for compatibility. "
+                "Results preserve this ordering; a failed position is null and "
+                "its safe details appear in the errors list."
+            ),
+            min_length=1,
+            max_length=50,
         ),
     ],
 ) -> dict[str, Any]:
@@ -74,8 +80,12 @@ async def batch_decisions(
 
     Each item in the list should have:
       - decision_type: str — name of the decision type
-      - input_data: dict — input payload
-      - request_id: str (optional) — idempotency key
+      - input: dict — input payload (input_data is accepted as an alias)
+      - latency_budget_ms: float (optional) — skip slower stages when needed
+
+    The response keeps one ``results`` position per request.  A null result is
+    not a decision: inspect the matching ``errors`` entry by its zero-based
+    index.  ``succeeded`` and ``failed`` provide an at-a-glance summary.
     """
     client = get_client()
     return await client.batch_decide(decisions)

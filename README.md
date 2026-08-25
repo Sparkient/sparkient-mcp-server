@@ -1,8 +1,6 @@
 # Sparkient MCP Server
 
-[![smithery badge](https://smithery.ai/badge/sparkient/sparkient)](https://smithery.ai/servers/sparkient/sparkient)
-
-MCP (Model Context Protocol) server for the [Sparkient](https://sparkient.ai) Decision Intelligence API. Connect your AI agents directly to Sparkient for sub-100ms structured decisions — no REST client code needed.
+MCP (Model Context Protocol) server for the [Sparkient](https://sparkient.ai) decision intelligence API. Connect AI agents to 15 tools for creating, training, retrying, cancelling, calling, inspecting, and exporting decision models. Compiled cloud decisions target an under-100ms model path; end-to-end MCP latency also includes the client and network.
 
 ## Quick Start
 
@@ -12,20 +10,7 @@ The cloud MCP server at `mcp.sparkient.ai` wraps the Sparkient REST API as MCP t
 
 #### Claude Desktop
 
-Add to your `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "sparkient": {
-      "url": "https://mcp.sparkient.ai/mcp",
-      "headers": {
-        "Authorization": "Bearer sk-YOUR_API_KEY"
-      }
-    }
-  }
-}
-```
+Claude Desktop does not load remote servers from `claude_desktop_config.json`. Its custom remote connectors use authless or OAuth-based servers, while Sparkient's cloud MCP currently uses an API key in the `Authorization` header. Use Cursor or VS Code for the cloud server, or use the local edge server documented below. See [Anthropic's remote connector guidance](https://support.anthropic.com/en/articles/11503834-building-custom-connectors-via-remote-mcp-servers).
 
 #### Cursor
 
@@ -37,7 +22,7 @@ In Cursor Settings → MCP, add:
     "sparkient": {
       "url": "https://mcp.sparkient.ai/mcp",
       "headers": {
-        "Authorization": "Bearer sk-YOUR_API_KEY"
+        "Authorization": "Bearer YOUR_API_KEY"
       }
     }
   }
@@ -55,7 +40,7 @@ Create `.vscode/mcp.json` in your project:
       "type": "http",
       "url": "https://mcp.sparkient.ai/mcp",
       "headers": {
-        "Authorization": "Bearer sk-YOUR_API_KEY"
+        "Authorization": "Bearer YOUR_API_KEY"
       }
     }
   }
@@ -64,7 +49,7 @@ Create `.vscode/mcp.json` in your project:
 
 #### Smithery
 
-Install via [Smithery](https://smithery.ai/server/sparkient):
+Install via [Smithery](https://smithery.ai/servers/sparkient/sparkient):
 
 ```bash
 npx -y @smithery/cli install sparkient --client claude
@@ -73,7 +58,7 @@ npx -y @smithery/cli install sparkient --client claude
 ### Local Development
 
 ```bash
-git clone https://github.com/sparkient/sparkient-mcp-server.git
+git clone https://github.com/Sparkient/sparkient-mcp-server.git
 cd sparkient-mcp-server
 pip install -e ".[dev]"
 
@@ -86,19 +71,23 @@ python -m sparkient_mcp
 
 | Tool | Description |
 |------|-------------|
-| `make_decision` | Make a structured decision in under 100ms |
-| `batch_decisions` | Make up to 50 decisions in a single call |
+| `make_decision` | Make a structured decision; the compiled stage targets under 100ms |
+| `batch_decisions` | Make up to 50 ordered decisions; failed positions are `null` with an indexed error and must not be acted on |
 | `list_decision_types` | List available decision types |
 | `get_decision_type` | Get full config of a decision type |
-| `create_decision_type` | Create a new decision type |
+| `create_decision_type` | Create a classifier-only decision type by default, with optional confidence thresholds and explicit live-LLM escalation |
 | `add_examples` | Add labelled training examples |
 | `generate_examples` | Generate synthetic examples via Gemini |
 | `train_model` | Trigger async model training |
 | `get_training_status` | Poll training status and stage progress |
+| `cancel_training` | Safely cancel the exact active policy attempt |
+| `retry_training` | Retry a recoverable failure against the same immutable snapshot |
 | `get_decision_logs` | Query past decision logs |
 | `get_metrics` | Get org-level aggregate metrics |
 | `get_credits` | Check credit balance and plan info |
 | `export_edge_bundle` | Download standalone model for offline inference |
+
+Example capacity is explicit: each decision type stores up to 5,000 examples, while the plan-specific training allowance may be lower. `add_examples` and `generate_examples` never silently truncate a request. A capacity conflict returns the current, requested, maximum, and remaining counts plus a recommended action.
 
 ## Available Resources
 
@@ -107,16 +96,9 @@ python -m sparkient_mcp
 | `sparkient://decision-types` | List all decision types (for agent discovery) |
 | `sparkient://decision-types/{name}` | Full schema of a specific decision type |
 
-## Directory Listings
+## Discovery
 
-The Sparkient MCP server is listed on the following directories so agents and developers can discover it:
-
-| Directory | URL | Status |
-|-----------|-----|--------|
-| **Smithery** | [smithery.ai/server/sparkient](https://smithery.ai/server/sparkient) | ✅ Listed |
-| **Glama** | [glama.ai](https://glama.ai) | Pending (requires public GitHub repo) |
-| **PulseMCP** | [pulsemcp.com](https://pulsemcp.com) | Pending (submit via site) |
-| **MCP Registry** | [registry.modelcontextprotocol.io](https://registry.modelcontextprotocol.io) | Pending (requires `mcp-publisher` CLI) |
+The verified public directory listing is [Smithery](https://smithery.ai/servers/sparkient/sparkient). The server also publishes a machine-readable card at [`https://mcp.sparkient.ai/mcp/server-card`](https://mcp.sparkient.ai/mcp/server-card). Other directory submissions are not claimed here until their public listings can be verified.
 
 ### Smithery Configuration
 
@@ -133,12 +115,63 @@ Most MCP directories discover capabilities by connecting to the server and calli
 1. **Standard MCP clients** — `initialize` → `notifications/initialized` → `tools/list` (returns via SSE)
 2. **Directory scanners** — `tools/list` directly without `initialize` (returns via JSON)
 
-## Local Edge MCP Server
+## Use with AI Agent Frameworks
 
-For sub-10ms decisions with zero network dependency, use the edge MCP server:
+The documented examples cover LangChain/LangGraph and LlamaIndex using their MCP adapters. No dedicated Sparkient package is needed; both send the Sparkient API key in the `Authorization` header.
+
+### LangChain
 
 ```bash
-pip install sparkient-edge
+pip install langchain langchain-mcp-adapters langchain-openai
+```
+
+```python
+import asyncio
+from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain.agents import create_agent
+from langchain_openai import ChatOpenAI
+
+async def main():
+    client = MultiServerMCPClient({
+        "sparkient": {
+            "transport": "streamable_http",
+            "url": "https://mcp.sparkient.ai/mcp",
+            "headers": {"Authorization": "Bearer YOUR_API_KEY"},
+        }
+    })
+    tools = await client.get_tools()
+    agent = create_agent(model=ChatOpenAI(model="gpt-4o"), tools=tools)
+    result = await agent.ainvoke({
+        "messages": [{"role": "user", "content": "Is this spam? 'BUY CHEAP WATCHES NOW!!!'"}]
+    })
+    print(result)
+
+asyncio.run(main())
+```
+
+### LlamaIndex
+
+```bash
+pip install llama-index-tools-mcp
+```
+
+```python
+from llama_index.tools.mcp import BasicMCPClient, McpToolSpec
+
+mcp_client = BasicMCPClient(
+    "https://mcp.sparkient.ai/mcp",
+    headers={"Authorization": "Bearer YOUR_API_KEY"},
+)
+tool_spec = McpToolSpec(client=mcp_client)
+tools = tool_spec.to_tool_list()  # All 15 Sparkient tools ready to use
+```
+
+## Local Edge MCP Server
+
+For local decisions with no network dependency after bundle download, use the edge MCP server and benchmark it on the target hardware:
+
+```bash
+pip install "sparkient-edge[mcp]"
 ```
 
 Claude Desktop config:
@@ -148,7 +181,7 @@ Claude Desktop config:
   "mcpServers": {
     "sparkient-edge": {
       "command": "python",
-      "args": ["-m", "edge"]
+      "args": ["-m", "sparkient_edge"]
     }
   }
 }

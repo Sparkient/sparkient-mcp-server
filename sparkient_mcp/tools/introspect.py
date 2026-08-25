@@ -7,8 +7,8 @@ from typing import Annotated, Any
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
-from sparkient_mcp.server import mcp
 from sparkient_mcp.client import get_client
+from sparkient_mcp.server import mcp
 
 
 @mcp.tool(
@@ -101,9 +101,10 @@ async def export_edge_bundle(
 ) -> dict[str, Any]:
     """Export a trained model as a standalone edge bundle (ZIP).
 
-    Downloads the active deployed model, feature config, CEL rules,
-    and metadata as a self-contained ZIP file. The bundle can run
-    offline with zero cloud dependencies using the sparkient-edge SDK:
+    Downloads the active deployed model, feature config, expression rules,
+    and metadata as a self-contained ZIP file. After download, the bundle
+    can run without calling Sparkient's cloud API using the sparkient-edge SDK;
+    compatible local package and runtime dependencies still apply:
 
         from sparkient_edge import EdgePredictor
         predictor = EdgePredictor.from_bundle("bundle.zip")

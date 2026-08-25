@@ -1,6 +1,6 @@
 [project]
 name = "sparkient-mcp-server"
-version = "0.1.0"
+version = "1.0.1"
 description = "MCP server for Sparkient Decision Intelligence API"
 requires-python = ">=3.12"
 license = "MIT"
@@ -15,7 +15,7 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://sparkient.ai"
-Repository = "https://github.com/sparkient/sparkient-mcp-server"
+Repository = "https://github.com/Sparkient/sparkient-mcp-server"
 Documentation = "https://docs.sparkient.ai"
 
 [project.optional-dependencies]

@@ -19,11 +19,10 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from starlette.types import ASGIApp, Receive, Scope, Send
+import structlog
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-
-import structlog
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
@@ -218,3 +217,71 @@ class UnknownMethodGuard:
             return await receive()
 
         await self._app(scope, replay_receive, send)
+
+
+class AuthMiddleware:
+    """ASGI middleware that extracts API keys and sets a per-request client.
+
+    In stateless HTTP mode (Cloud Run), each request is independent.
+    This middleware:
+
+    1. Extracts the API key from the ``Authorization: Bearer YOUR_API_KEY`` header.
+    2. Creates or retrieves a cached :class:`SparkientClient` for that key.
+    3. Sets it on a :mod:`contextvars` context variable so that
+       :func:`sparkient_mcp.client.get_client` can resolve it during
+       tool dispatch.
+
+    Requests without a valid API key are rejected with a JSON-RPC
+    ``-32000`` error (server error) for MCP endpoints, or allowed
+    through for non-MCP paths (health checks, server cards, etc.).
+    """
+
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        mcp_path: str = "/mcp",
+    ) -> None:
+        self._app = app
+        self._mcp_path = mcp_path
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self._app(scope, receive, send)
+            return
+
+        request = Request(scope, receive)
+        path = request.url.path
+
+        # Only enforce auth on the MCP endpoint (POST /mcp).
+        # Health checks, server cards, and GET /mcp (SSE) pass through.
+        if request.method == "POST" and path == self._mcp_path:
+            from sparkient_mcp.auth import extract_api_key
+            from sparkient_mcp.client import get_or_create_client
+
+            raw_headers = {k.decode(): v.decode() for k, v in scope.get("headers", [])}
+            api_key = extract_api_key(raw_headers)
+
+            if api_key is None:
+                log.warning("auth_missing_api_key", path=path)
+                error_response = {
+                    "jsonrpc": "2.0",
+                    "id": None,
+                    "error": {
+                        "code": -32000,
+                        "message": (
+                            "Authentication required. Provide a Sparkient API key "
+                            "via the Authorization: Bearer YOUR_API_KEY header."
+                        ),
+                    },
+                }
+                response = JSONResponse(error_response, status_code=401)
+                await response(scope, receive, send)
+                return
+
+            # Create or reuse client for this API key — also sets the
+            # context variable so get_client() will find it.
+            get_or_create_client(api_key)
+            log.debug("auth_api_key_set", path=path)
+
+        await self._app(scope, receive, send)

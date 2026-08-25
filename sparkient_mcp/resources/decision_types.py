@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from sparkient_mcp.server import mcp
 from sparkient_mcp.client import get_client
+from sparkient_mcp.server import mcp
 
 
 @mcp.resource("sparkient://decision-types")
