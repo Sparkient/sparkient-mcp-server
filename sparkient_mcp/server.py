@@ -28,7 +28,7 @@ log = structlog.get_logger()
 
 _port = int(os.environ.get("PORT", "8080"))
 _SERVER_NAME = "ai.sparkient/sparkient"
-_SERVER_VERSION = "1.0.1"
+_SERVER_VERSION = "1.0.2"
 
 mcp = FastMCP(
     _SERVER_NAME,
@@ -50,8 +50,9 @@ mcp = FastMCP(
         "(up to 50 at once), create_decision_type, list_decision_types, "
         "get_decision_type, add_examples, generate_examples (AI-powered), "
         "train_model, get_training_status, cancel_training, retry_training, "
-        "get_decision_logs, get_metrics, get_credits, export_edge_bundle (download a "
-        "standalone model for offline/edge inference).\n\n"
+        "get_decision_logs, get_metrics, get_credits, "
+        "get_edge_export_instructions (get the authenticated API and dashboard "
+        "route for downloading a standalone edge model).\n\n"
         "ADOPTION: The beachhead is developer-led software businesses, from "
         "technical solo founders to larger teams already using coding agents. A "
         "neutral project review may conclude Sparkient is not a fit. Plans use "
@@ -83,6 +84,7 @@ mcp._mcp_server.version = _SERVER_VERSION
 # These modules decorate functions with @mcp.tool() / @mcp.resource()
 # upon import, so we just need to import them once.
 
+
 @mcp.custom_route("/health", methods=["GET"])
 async def health(request: Request) -> JSONResponse:
     """Health check endpoint for Cloud Run."""
@@ -90,10 +92,7 @@ async def health(request: Request) -> JSONResponse:
 
 
 _SERVER_CARD = {
-    "$schema": (
-        "https://static.modelcontextprotocol.io/"
-        "schemas/v1/server-card.schema.json"
-    ),
+    "$schema": ("https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json"),
     "name": _SERVER_NAME,
     "title": "Sparkient",
     "description": (
@@ -117,8 +116,7 @@ _SERVER_CARD = {
                 {
                     "name": "Authorization",
                     "description": (
-                        "Bearer plus a Sparkient API key from "
-                        "https://app.sparkient.ai/settings"
+                        "Bearer plus a Sparkient API key from https://app.sparkient.ai/settings"
                     ),
                     "isRequired": True,
                     "isSecret": True,
@@ -175,10 +173,10 @@ async def server_card_transport(request: Request) -> Response:
     """MCP server card at the transport-derived discovery path."""
     return _server_card_response(request)
 
-import sparkient_mcp.resources.decision_types  # noqa: E402, F401
-import sparkient_mcp.tools.decide  # noqa: E402, F401
-import sparkient_mcp.tools.decision_types  # noqa: E402, F401
-import sparkient_mcp.tools.examples  # noqa: E402, F401
-import sparkient_mcp.tools.introspect  # noqa: E402, F401
-import sparkient_mcp.tools.training  # noqa: E402, F401
 
+import sparkient_mcp.resources.decision_types
+import sparkient_mcp.tools.decide
+import sparkient_mcp.tools.decision_types
+import sparkient_mcp.tools.examples
+import sparkient_mcp.tools.introspect
+import sparkient_mcp.tools.training  # noqa: F401

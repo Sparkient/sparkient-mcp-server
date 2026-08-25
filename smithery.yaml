@@ -6,7 +6,7 @@ description: >-
   that returns a structured answer with confidence and reason codes. The
   compiled path targets under 100ms and must be validated on each workload;
   configured low-confidence cloud decisions can optionally escalate to an LLM.
-version: 1.0.1
+version: 1.0.2
 author: Sparkient
 repository: https://github.com/sparkient/sparkient-mcp-server
 homepage: https://sparkient.ai

@@ -147,6 +147,43 @@ async def test_example_capacity_error_preserves_exact_counts() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method_name", "path"),
+    [
+        ("add_examples", "/api/v1/decision-types/dt-1/examples"),
+        ("generate_examples", "/api/v1/decision-types/dt-1/examples/generate"),
+    ],
+)
+async def test_example_methods_preserve_rest_array_responses(
+    method_name: str,
+    path: str,
+) -> None:
+    """The client must not coerce REST example arrays into fictional objects."""
+    client = SparkientClient("https://api.example.com", "test-key")
+    request = httpx.Request("POST", f"https://api.example.com{path}")
+    expected = [
+        {
+            "id": "example-1",
+            "input_payload": {"value": 1},
+            "expected_decision": "allow",
+        }
+    ]
+    response = httpx.Response(200, request=request, json=expected)
+    client._http.request = AsyncMock(return_value=response)  # type: ignore[method-assign]
+
+    if method_name == "add_examples":
+        result = await client.add_examples(
+            "dt-1",
+            [{"input_payload": {"value": 1}, "expected_decision": "allow"}],
+        )
+    else:
+        result = await client.generate_examples("dt-1", count=1)
+
+    assert result == expected
+    await client.close()
+
+
+@pytest.mark.asyncio
 async def test_retry_training_posts_to_same_policy() -> None:
     client = SparkientClient("https://api.example.com", "test-key")
     client._request = AsyncMock(return_value={"policy_id": "policy-1", "status": "training"})  # type: ignore[method-assign]
@@ -158,6 +195,28 @@ async def test_retry_training_posts_to_same_policy() -> None:
         "/decision-types/dt-1/policies/policy-1/retry",
     )
     assert result["policy_id"] == "policy-1"
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_edge_export_instructions_do_not_fetch_or_embed_the_bundle() -> None:
+    client = SparkientClient("https://api.example.com/", "test-key")
+    client._http.request = AsyncMock()  # type: ignore[method-assign]
+
+    result = await client.get_edge_export_instructions("dt-1")
+
+    client._http.request.assert_not_awaited()
+    assert result["transfers_bundle"] is False
+    assert result["download"] == {
+        "method": "GET",
+        "url": "https://api.example.com/api/v1/decision-types/dt-1/export",
+        "authentication": (
+            "Send an Authorization header with Bearer followed by a Sparkient "
+            "API key. The endpoint streams the ZIP response."
+        ),
+    }
+    assert result["dashboard"]["url"] == ("https://app.sparkient.ai/decision-types/dt-1")
+    assert "bundle_base64" not in result
     await client.close()
 
 
@@ -301,6 +360,41 @@ class TestDecisionPayloads:
                 "escalation_policy": {"enabled": False},
             },
         )
+        await client._http.aclose()
+
+    @pytest.mark.asyncio
+    async def test_list_types_forwards_search_query(self) -> None:
+        client = SparkientClient("https://api.example.com", "c" * 64)
+        client._request = AsyncMock(return_value={"items": [], "total": 0})  # type: ignore[method-assign]
+
+        await client.list_decision_types(page=2, page_size=10, search="risk routing")
+
+        client._request.assert_awaited_once_with(  # type: ignore[attr-defined]
+            "GET",
+            "/decision-types",
+            params={"page": 2, "page_size": 10, "search": "risk routing"},
+        )
+        await client._http.aclose()
+
+    @pytest.mark.asyncio
+    async def test_create_type_forwards_input_schema(self) -> None:
+        client = SparkientClient("https://api.example.com", "c" * 64)
+        client._request = AsyncMock(return_value={"id": "new"})  # type: ignore[method-assign]
+        input_schema = {
+            "type": "object",
+            "properties": {"text": {"type": "string"}},
+            "required": ["text"],
+        }
+
+        await client.create_decision_type(
+            "moderation",
+            "Moderate content",
+            ["allow", "block"],
+            input_schema=input_schema,
+        )
+
+        payload = client._request.await_args.kwargs["json"]  # type: ignore[attr-defined]
+        assert payload["input_schema"] == input_schema
         await client._http.aclose()
 
     @pytest.mark.asyncio

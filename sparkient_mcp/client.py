@@ -1,8 +1,9 @@
 """Async HTTP client wrapping the Sparkient REST API.
 
-All methods return plain dicts — either the API response payload or a
-structured error dict ``{"error": "...", "status": <int>}``.  This keeps
-the MCP tool layer free of exception handling.
+Methods return the REST API's JSON shape. Most endpoints return objects;
+example-creation endpoints return arrays. Failures are normalized to a
+structured error object ``{"error": "...", "status": <int>}``. This keeps
+the MCP tool layer free of exception handling without misrepresenting arrays.
 """
 
 from __future__ import annotations
@@ -225,9 +226,15 @@ class SparkientClient:
                 detail = error_details
         if detail is not None:
             for key in (
-                "retryable", "recommended_action", "policy_id", "policy",
-                "dataset", "unavailable_example_ids",
-                "current_examples", "requested_examples", "max_examples",
+                "retryable",
+                "recommended_action",
+                "policy_id",
+                "policy",
+                "dataset",
+                "unavailable_example_ids",
+                "current_examples",
+                "requested_examples",
+                "max_examples",
                 "remaining_examples",
             ):
                 if key in detail:
@@ -335,6 +342,7 @@ class SparkientClient:
         escalation_enabled: bool = False,
         escalate_below: float = 0.7,
         per_option_thresholds: dict[str, float] | None = None,
+        input_schema: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Create a new decision type."""
         payload: dict[str, Any] = {
@@ -351,6 +359,8 @@ class SparkientClient:
             payload["reason_codes"] = reason_codes
         if rules is not None:
             payload["rules"] = rules
+        if input_schema is not None:
+            payload["input_schema"] = input_schema
         return await self._request("POST", "/decision-types", json=payload)
 
     # ------------------------------------------------------------------
@@ -361,7 +371,7 @@ class SparkientClient:
         self,
         decision_type_id: str,
         examples: list[dict[str, Any]],
-    ) -> dict[str, Any]:
+    ) -> list[dict[str, Any]] | dict[str, Any]:
         """Add labelled training examples to a decision type."""
         return await self._request(
             "POST",
@@ -373,7 +383,7 @@ class SparkientClient:
         self,
         decision_type_id: str,
         count: int = 10,
-    ) -> dict[str, Any]:
+    ) -> list[dict[str, Any]] | dict[str, Any]:
         """Generate synthetic examples using the LLM teacher."""
         return await self._request(
             "POST",
@@ -455,51 +465,36 @@ class SparkientClient:
         """Get the org's current credit balance."""
         return await self._request("GET", "/credits")
 
-    async def export_edge_bundle(
+    async def get_edge_export_instructions(
         self,
         decision_type_id: str,
     ) -> dict[str, Any]:
-        """Export the active model as a standalone edge bundle (ZIP).
+        """Describe the authenticated ways to download an edge bundle.
 
-        Returns base64-encoded ZIP bytes and a suggested filename,
-        or a structured error dict.
+        Edge bundles can contain hundreds of megabytes of model assets, so they
+        are deliberately not transferred inside an MCP JSON response.
         """
-        import base64
-
-        try:
-            response = await self._http.request(
-                "GET",
-                f"/decision-types/{decision_type_id}/export",
-            )
-            response.raise_for_status()
-            bundle_b64 = base64.b64encode(response.content).decode("ascii")
-            # Extract filename from Content-Disposition header
-            cd = response.headers.get("content-disposition", "")
-            filename = "edge_bundle.zip"
-            if 'filename="' in cd:
-                filename = cd.split('filename="')[1].rstrip('"')
-            return {
-                "filename": filename,
-                "size_bytes": len(response.content),
-                "bundle_base64": bundle_b64,
-            }
-        except httpx.HTTPStatusError as exc:
-            error = self._error_response(exc.response)
-            log.warning(
-                "sparkient_api_error",
-                status=error["status"],
-                code=error["code"],
-                detail=error["message"],
-                path=f"/decision-types/{decision_type_id}/export",
-            )
-            return error
-        except httpx.RequestError as exc:
-            log.error(
-                "sparkient_api_request_error",
-                error=str(exc),
-                path=f"/decision-types/{decision_type_id}/export",
-            )
-            return {"error": f"Connection error: {exc}", "status": 502}
+        return {
+            "decision_type_id": decision_type_id,
+            "transfers_bundle": False,
+            "download": {
+                "method": "GET",
+                "url": (f"{self._base_url}/api/v1/decision-types/{decision_type_id}/export"),
+                "authentication": (
+                    "Send an Authorization header with Bearer followed by a "
+                    "Sparkient API key. The endpoint streams the ZIP response."
+                ),
+            },
+            "dashboard": {
+                "url": (f"https://app.sparkient.ai/decision-types/{decision_type_id}"),
+                "action": "Open the decision type and choose Export.",
+            },
+            "eligibility": ("Growth or Scale plan and an active deployed policy."),
+            "note": (
+                "This MCP tool provides download instructions only; it does not "
+                "download, encode, or transfer the bundle."
+            ),
+        }
 
     # ------------------------------------------------------------------
     # Lifecycle

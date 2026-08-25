@@ -1,6 +1,6 @@
 # Sparkient MCP Server
 
-MCP (Model Context Protocol) server for the [Sparkient](https://sparkient.ai) decision intelligence API. Connect AI agents to 15 tools for creating, training, retrying, cancelling, calling, inspecting, and exporting decision models. Compiled cloud decisions target an under-100ms model path; end-to-end MCP latency also includes the client and network.
+MCP (Model Context Protocol) server for the [Sparkient](https://sparkient.ai) decision intelligence API. Connect AI agents to 15 tools for creating, training, retrying, cancelling, calling, inspecting, and obtaining edge-export instructions for decision models. Compiled cloud decisions target an under-100ms model path; end-to-end MCP latency also includes the client and network.
 
 ## Quick Start
 
@@ -58,34 +58,50 @@ npx -y @smithery/cli install sparkient --client claude
 ### Local Development
 
 ```bash
-git clone https://github.com/Sparkient/sparkient-mcp-server.git
-cd sparkient-mcp-server
+cd mcp-server
 pip install -e ".[dev]"
 
-# Set your API key and start
+# Set the upstream API URL and start the local MCP proxy
 export SPARKIENT_API_URL=https://api.sparkient.ai
 python -m sparkient_mcp
+```
+
+Keep the Sparkient API key in the MCP client, not in the server process. For
+example, point Cursor at the local proxy and send the bearer header on every
+request:
+
+```json
+{
+  "mcpServers": {
+    "sparkient-local-dev": {
+      "url": "http://localhost:8080/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_API_KEY"
+      }
+    }
+  }
+}
 ```
 
 ## Available Tools
 
 | Tool | Description |
 |------|-------------|
-| `make_decision` | Make a structured decision; the compiled stage targets under 100ms |
+| `make_decision` | Make a metered, logged decision; `escalate` means human review, while `llm_escalated` reports completed live-LLM use |
 | `batch_decisions` | Make up to 50 ordered decisions; failed positions are `null` with an indexed error and must not be acted on |
-| `list_decision_types` | List available decision types |
-| `get_decision_type` | Get full config of a decision type |
-| `create_decision_type` | Create a classifier-only decision type by default, with optional confidence thresholds and explicit live-LLM escalation |
-| `add_examples` | Add labelled training examples |
-| `generate_examples` | Generate synthetic examples via Gemini |
-| `train_model` | Trigger async model training |
+| `list_decision_types` | List and optionally search decision types by name or description |
+| `get_decision_type` | Get metadata, the active configuration version, and deployment status |
+| `create_decision_type` | Create a classifier-only type by default, with structured CEL rules, optional input schema, confidence thresholds, and explicit live-LLM escalation |
+| `add_examples` | Add labelled examples and return the created example records |
+| `generate_examples` | Generate synthetic examples via Gemini and return the created records |
+| `train_model` | Trigger async training after at least 38 labelled examples per option |
 | `get_training_status` | Poll training status and stage progress |
 | `cancel_training` | Safely cancel the exact active policy attempt |
 | `retry_training` | Retry a recoverable failure against the same immutable snapshot |
 | `get_decision_logs` | Query past decision logs |
-| `get_metrics` | Get org-level aggregate metrics |
-| `get_credits` | Check credit balance and plan info |
-| `export_edge_bundle` | Download standalone model for offline inference |
+| `get_metrics` | Get organisation aggregates for the last 24 hours, including compiled and escalation rates |
+| `get_credits` | Check credit balance, plan info, and a paid-plan reset date when applicable |
+| `get_edge_export_instructions` | Get the authenticated REST URL and dashboard path for downloading an eligible Growth/Scale edge bundle; does not transfer the ZIP through MCP |
 
 Example capacity is explicit: each decision type stores up to 5,000 examples, while the plan-specific training allowance may be lower. `add_examples` and `generate_examples` never silently truncate a request. A capacity conflict returns the current, requested, maximum, and remaining counts plus a recommended action.
 
@@ -98,7 +114,7 @@ Example capacity is explicit: each decision type stores up to 5,000 examples, wh
 
 ## Discovery
 
-The verified public directory listing is [Smithery](https://smithery.ai/servers/sparkient/sparkient). The server also publishes a machine-readable card at [`https://mcp.sparkient.ai/mcp/server-card`](https://mcp.sparkient.ai/mcp/server-card). Other directory submissions are not claimed here until their public listings can be verified.
+The authoritative machine-readable contract is the live server card at [`https://mcp.sparkient.ai/.well-known/mcp/server-card.json`](https://mcp.sparkient.ai/.well-known/mcp/server-card.json). Third-party directory pages, including [Smithery](https://smithery.ai/servers/sparkient/sparkient), are independently cached mirrors and can lag a release; verify their displayed tools and claims against the server card before relying on them.
 
 ### Smithery Configuration
 
@@ -187,7 +203,7 @@ Claude Desktop config:
 }
 ```
 
-The edge server uses downloaded edge bundles (CEL rules + ONNX models) for local inference. Export a bundle from the Sparkient dashboard or via the `export_edge_bundle` MCP tool.
+The edge server uses downloaded edge bundles (CEL rules + ONNX models) for local inference. Open the decision type in the Sparkient dashboard and choose **Export**, or call `get_edge_export_instructions` for the protected REST download URL and authentication requirements. The MCP tool does not transfer the ZIP itself.
 
 See [sparkient-edge on PyPI](https://pypi.org/project/sparkient-edge/) for details.
 
@@ -207,7 +223,7 @@ Sparkient MCP Server (this package)
     ↓ httpx (async HTTP)
 Sparkient REST API (api.sparkient.ai)
     ↓
-Decision Pipeline: CEL Rules → ONNX Classifier → Gemini Escalation
+Decision Pipeline: CEL Rules → ONNX Classifier → Optional Gemini escalation (when enabled)
 ```
 
 The MCP server is a stateless thin wrapper. Each request is handled independently — no session tracking. Multiple Cloud Run instances serve concurrent requests behind a single URL.

@@ -15,7 +15,7 @@ from sparkient_mcp.server import mcp
     annotations=ToolAnnotations(
         readOnlyHint=False,
         destructiveHint=False,
-        idempotentHint=True,
+        idempotentHint=False,
         openWorldHint=True,
     ),
 )
@@ -45,8 +45,13 @@ async def make_decision(
          domains measured 33–42ms average time per item in batched runs
       3. Optional LLM escalation — only for configured low-confidence cases
 
-    Every decision returns: decision, confidence, reason_codes,
-    latency_ms, stage, and whether it was escalated.
+    Every decision returns ``stage`` plus three distinct status flags:
+    ``escalate`` means the result requires human review; ``llm_escalated``
+    means the optional live-LLM stage produced the decision; and
+    ``fallback_used`` means the configured non-LLM fallback produced it.
+
+    This call consumes credits and writes a decision log, so it is not
+    idempotent even when the same input is submitted again.
     """
     client = get_client()
     return await client.decide(decision_type, input_data, request_id)

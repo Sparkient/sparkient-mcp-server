@@ -19,7 +19,6 @@ from sparkient_mcp.server import (
     server_card_transport,
 )
 
-
 EXPECTED_TOOLS = {
     "make_decision",
     "batch_decisions",
@@ -35,7 +34,7 @@ EXPECTED_TOOLS = {
     "get_decision_logs",
     "get_metrics",
     "get_credits",
-    "export_edge_bundle",
+    "get_edge_export_instructions",
 }
 
 
@@ -77,7 +76,9 @@ async def test_server_card_routes_return_advertised_media_type(handler) -> None:
 
     assert response.media_type == "application/mcp-server-card+json"
     body = json.loads(response.body)
-    assert body["$schema"].endswith("/schemas/v1/server-card.schema.json")
+    assert body["$schema"] == (
+        "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json"
+    )
     assert body["name"] == "ai.sparkient/sparkient"
     assert body["title"] == "Sparkient"
     assert body["remotes"][0]["url"] == "https://mcp.sparkient.ai/mcp"

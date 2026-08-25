@@ -33,11 +33,12 @@ async def add_examples(
             )
         ),
     ],
-) -> dict[str, Any]:
+) -> list[dict[str, Any]] | dict[str, Any]:
     """Add labelled training examples to a decision type.
 
-    More examples can improve model accuracy. Aim for at least 50 examples
-    per option, with balanced class distribution. A decision type can store
+    More representative examples can improve model accuracy. Training requires
+    at least 38 labelled examples per option, with balanced class distribution.
+    A decision type can store
     up to 5,000 examples; capacity errors report the exact remaining space.
     """
     client = get_client()
@@ -61,7 +62,7 @@ async def generate_examples(
         int,
         Field(description="Number of examples to generate (1-50)."),
     ] = 10,
-) -> dict[str, Any]:
+) -> list[dict[str, Any]] | dict[str, Any]:
     """Generate synthetic training examples using AI.
 
     Uses the decision type's description and options to generate

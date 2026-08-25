@@ -30,7 +30,7 @@ def test_public_tools_discovery_bypasses_auth(assembled_client: TestClient) -> N
     assert response.status_code == 200
     tool_names = {tool["name"] for tool in response.json()["result"]["tools"]}
     assert "make_decision" in tool_names
-    assert "export_edge_bundle" in tool_names
+    assert "get_edge_export_instructions" in tool_names
 
 
 def test_public_resource_discovery_bypasses_auth(
@@ -39,9 +39,7 @@ def test_public_resource_discovery_bypasses_auth(
     response = assembled_client.post("/mcp", json=_rpc("resources/list"))
 
     assert response.status_code == 200
-    resource_uris = {
-        resource["uri"] for resource in response.json()["result"]["resources"]
-    }
+    resource_uris = {resource["uri"] for resource in response.json()["result"]["resources"]}
     assert "sparkient://decision-types" in resource_uris
 
 

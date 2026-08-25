@@ -1,4 +1,4 @@
-"""Introspection tools — logs, metrics, credits, and edge export."""
+"""Introspection tools — logs, metrics, credits, and edge export guidance."""
 
 from __future__ import annotations
 
@@ -53,11 +53,12 @@ async def get_decision_logs(
     ),
 )
 async def get_metrics() -> dict[str, Any]:
-    """Get org-level aggregate metrics.
+    """Get organisation-level aggregate metrics for the last 24 hours.
 
-    Returns summary statistics for your organisation including
-    total decisions, decisions today, average latency, and
-    per-decision-type breakdowns.
+    Returns total decisions, compiled and escalated average latency,
+    ``compiled_rate``, escalation rate, average confidence, decision
+    distribution, active decision-type count, and the five most recent
+    decisions. It does not include per-decision-type breakdowns.
     """
     client = get_client()
     return await client.get_metrics()
@@ -74,9 +75,9 @@ async def get_metrics() -> dict[str, Any]:
 async def get_credits() -> dict[str, Any]:
     """Check your organisation's current credit balance.
 
-    Returns how many credits remain this billing period,
-    the total allocation, percentage used, plan tier,
-    and when credits reset.
+    Returns how many credits remain, the current allocation, percentage used,
+    plan tier, and ``resets_at`` when a recurring paid allocation has a reset.
+    Trial credits are a one-time grant and therefore have no reset date.
 
     Use this before running expensive operations (batch decisions,
     training, example generation) to ensure you have enough credits.
@@ -90,28 +91,26 @@ async def get_credits() -> dict[str, Any]:
         readOnlyHint=True,
         destructiveHint=False,
         idempotentHint=True,
-        openWorldHint=True,
+        openWorldHint=False,
     ),
 )
-async def export_edge_bundle(
+async def get_edge_export_instructions(
     decision_type_id: Annotated[
         str,
-        Field(description="UUID of the decision type to export."),
+        Field(description="UUID of the decision type whose bundle you need."),
     ],
 ) -> dict[str, Any]:
-    """Export a trained model as a standalone edge bundle (ZIP).
+    """Get authenticated download instructions for an edge bundle.
 
-    Downloads the active deployed model, feature config, expression rules,
-    and metadata as a self-contained ZIP file. After download, the bundle
-    can run without calling Sparkient's cloud API using the sparkient-edge SDK;
-    compatible local package and runtime dependencies still apply:
+    This tool does not download, base64-encode, or transfer the ZIP because a
+    normal text-model bundle can be hundreds of megabytes. It returns the
+    protected REST endpoint, required Bearer authentication, and the real
+    dashboard decision-type page. The REST endpoint streams the bundle after
+    authenticating the caller.
 
-        from sparkient_edge import EdgePredictor
-        predictor = EdgePredictor.from_bundle("bundle.zip")
-        result = predictor.predict({"text": "hello"})
-
-    Requires a deployed model (call train_model first).
-    Requires Growth plan or above.
+    Export requires a Growth or Scale plan and an active deployed policy. Once
+    downloaded, the bundle can run without Sparkient cloud calls through the
+    ``sparkient-edge`` SDK; compatible local runtime dependencies still apply.
     """
     client = get_client()
-    return await client.export_edge_bundle(decision_type_id)
+    return await client.get_edge_export_instructions(decision_type_id)
