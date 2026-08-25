@@ -31,7 +31,6 @@ EXPECTED_TOOLS = {
     "train_model",
     "get_training_status",
     "cancel_training",
-    "retry_training",
     "get_decision_logs",
     "get_metrics",
     "get_credits",
@@ -75,13 +74,13 @@ class TestServerInstance:
         assert _SERVER_VERSION == project["version"]
 
     def test_tools_registered(self) -> None:
-        """The documented 15-tool inventory must match registration exactly."""
+        """The documented 14-tool inventory must match registration exactly."""
         tool_names = {t.name for t in mcp._tool_manager.list_tools()}
         assert tool_names == EXPECTED_TOOLS
 
     def test_minimum_tool_count(self) -> None:
         tools = mcp._tool_manager.list_tools()
-        assert len(tools) == 15
+        assert len(tools) == 14
 
 
 @pytest.mark.asyncio

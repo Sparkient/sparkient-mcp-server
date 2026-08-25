@@ -28,7 +28,7 @@ log = structlog.get_logger()
 
 _port = int(os.environ.get("PORT", "8080"))
 _SERVER_NAME = "ai.sparkient/sparkient"
-_SERVER_VERSION = "1.0.3"
+_SERVER_VERSION = "1.0.4"
 
 mcp = FastMCP(
     _SERVER_NAME,
@@ -49,7 +49,7 @@ mcp = FastMCP(
         "TOOLS: make_decision, batch_decisions "
         "(up to 50 at once), create_decision_type, list_decision_types, "
         "get_decision_type, add_examples, generate_examples (AI-powered), "
-        "train_model, get_training_status, cancel_training, retry_training, "
+        "train_model, get_training_status, cancel_training, "
         "get_decision_logs, get_metrics, get_credits, "
         "get_edge_export_instructions (get the authenticated API and dashboard "
         "route for downloading a standalone edge model).\n\n"

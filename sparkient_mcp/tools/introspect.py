@@ -26,17 +26,17 @@ async def get_decision_logs(
     ],
     page: Annotated[
         int,
-        Field(description="Page number (1-indexed)."),
+        Field(ge=1, description="Page number (1-indexed)."),
     ] = 1,
     page_size: Annotated[
         int,
-        Field(description="Results per page (max 100)."),
+        Field(ge=1, le=100, description="Results per page (max 100)."),
     ] = 20,
 ) -> dict[str, Any]:
     """Query past decision logs for a decision type.
 
     Returns a paginated list of decisions including input data,
-    decision, confidence, stage, latency, and timestamp.
+    decision, confidence, latency, and timestamp.
 
     Useful for auditing, debugging, or finding examples for retraining.
     """
@@ -56,7 +56,7 @@ async def get_metrics() -> dict[str, Any]:
     """Get organisation-level aggregate metrics for the last 24 hours.
 
     Returns total decisions, compiled and escalated average latency,
-    ``compiled_rate``, escalation rate, average confidence, decision
+    ``success_rate``, escalation rate, average confidence, decision
     distribution, active decision-type count, and the five most recent
     decisions. It does not include per-decision-type breakdowns.
     """
@@ -76,8 +76,7 @@ async def get_credits() -> dict[str, Any]:
     """Check your organisation's current credit balance.
 
     Returns how many credits remain, the current allocation, percentage used,
-    plan tier, and ``resets_at`` when a recurring paid allocation has a reset.
-    Trial credits are a one-time grant and therefore have no reset date.
+    plan tier, and the API's ``resets_at`` value.
 
     Use this before running expensive operations (batch decisions,
     training, example generation) to ensure you have enough credits.

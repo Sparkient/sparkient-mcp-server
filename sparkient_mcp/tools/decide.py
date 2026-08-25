@@ -45,10 +45,9 @@ async def make_decision(
          domains measured 33–42ms average time per item in batched runs
       3. Optional LLM escalation — only for configured low-confidence cases
 
-    Every decision returns ``stage`` plus three distinct status flags:
-    ``escalate`` means the result requires human review; ``llm_escalated``
-    means the optional live-LLM stage produced the decision; and
-    ``fallback_used`` means the configured non-LLM fallback produced it.
+    Every decision returns ``stage`` plus ``escalate`` and ``fallback_used``.
+    The current API sets both flags for results from the ``escalation`` or
+    ``fallback`` stage, so inspect ``stage`` to distinguish those outcomes.
 
     This call consumes credits and writes a decision log, so it is not
     idempotent even when the same input is submitted again.

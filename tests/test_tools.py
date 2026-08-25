@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import inspect
-from unittest.mock import AsyncMock, patch
+import json
+from unittest.mock import AsyncMock, call, patch
 
 import pytest
 
 import sparkient_mcp.client as client_mod
 from sparkient_mcp.client import _request_client, set_request_client
-from sparkient_mcp.resources.decision_types import get_decision_type_by_id
+from sparkient_mcp.resources.decision_types import (
+    get_decision_type_by_id,
+    list_all_decision_types,
+)
 from sparkient_mcp.server import mcp
 from sparkient_mcp.tools.decide import batch_decisions, make_decision
 from sparkient_mcp.tools.decision_types import (
@@ -24,7 +28,7 @@ from sparkient_mcp.tools.introspect import (
     get_edge_export_instructions,
     get_metrics,
 )
-from sparkient_mcp.tools.training import cancel_training, retry_training, train_model
+from sparkient_mcp.tools.training import cancel_training, train_model
 
 
 @pytest.fixture(autouse=True)
@@ -49,11 +53,6 @@ def _mock_client():
     mock.generate_examples.return_value = [{"id": "generated-1", "expected_decision": "yes"}]
     mock.train_model.return_value = {"status": "accepted", "job_id": "j-1"}
     mock.cancel_training.return_value = {"status": "cancelled", "id": "policy-1"}
-    mock.retry_training.return_value = {
-        "status": "training",
-        "policy_id": "policy-1",
-        "dataset": {"manifest_id": "sha256:test"},
-    }
     mock.get_decision_logs.return_value = {"items": [], "total": 0}
     mock.get_metrics.return_value = {"total_decisions": 100}
     mock.get_edge_export_instructions.return_value = {
@@ -86,6 +85,65 @@ async def test_decision_type_resource_uses_backend_uuid_contract(
 
     _mock_client.get_decision_type.assert_awaited_once_with(decision_type_id)
     assert '"id": "abc"' in result
+
+
+@pytest.mark.asyncio
+async def test_decision_type_resource_paginates_and_uses_active_version(
+    _mock_client: AsyncMock,
+) -> None:
+    _mock_client.list_decision_types.side_effect = [
+        {
+            "items": [
+                {
+                    "id": "one",
+                    "name": "first",
+                    "description": "First type",
+                    "model_deployed": True,
+                    "active_version": {"options": ["yes", "no"]},
+                }
+            ],
+            "page": 1,
+            "pages": 2,
+            "total": 2,
+        },
+        {
+            "items": [
+                {
+                    "id": "two",
+                    "name": "second",
+                    "description": "Second type",
+                    "model_deployed": False,
+                    "active_version": None,
+                }
+            ],
+            "page": 2,
+            "pages": 2,
+            "total": 2,
+        },
+    ]
+
+    result = json.loads(await list_all_decision_types())
+
+    assert _mock_client.list_decision_types.await_args_list == [
+        call(page=1, page_size=100),
+        call(page=2, page_size=100),
+    ]
+    assert result == [
+        {
+            "id": "one",
+            "name": "first",
+            "description": "First type",
+            "model_deployed": True,
+            "options": ["yes", "no"],
+        },
+        {
+            "id": "two",
+            "name": "second",
+            "description": "Second type",
+            "model_deployed": False,
+            "options": [],
+        },
+    ]
 
 
 @pytest.mark.asyncio
@@ -149,19 +207,12 @@ async def test_batch_decisions_surfaces_null_with_matching_error(
 @pytest.mark.asyncio
 async def test_list_decision_types(_mock_client: AsyncMock) -> None:
     result = await list_decision_types(page=2, page_size=10)
-    _mock_client.list_decision_types.assert_awaited_once_with(2, 10, None)
+    _mock_client.list_decision_types.assert_awaited_once_with(2, 10)
     assert "items" in result
 
 
-@pytest.mark.asyncio
-async def test_list_decision_types_forwards_search(_mock_client: AsyncMock) -> None:
-    await list_decision_types(search="risk routing")
-
-    _mock_client.list_decision_types.assert_awaited_once_with(
-        1,
-        20,
-        "risk routing",
-    )
+def test_list_decision_types_does_not_expose_unsupported_search() -> None:
+    assert "search" not in inspect.signature(list_decision_types).parameters
 
 
 @pytest.mark.asyncio
@@ -339,13 +390,13 @@ async def test_fastmcp_validates_rest_shaped_example_arrays(
     assert structured == {"result": expected}
 
 
-def test_make_decision_metadata_reports_side_effects_and_distinct_flags() -> None:
+def test_make_decision_metadata_reports_supported_status_flags() -> None:
     tool = mcp._tool_manager.get_tool("make_decision")
 
     assert tool is not None
     assert tool.annotations.idempotentHint is False
-    assert "human review" in tool.description
-    assert "llm_escalated" in tool.description
+    assert "inspect ``stage``" in tool.description
+    assert "llm_escalated" not in tool.description
     assert "fallback_used" in tool.description
 
 
@@ -385,17 +436,6 @@ async def test_cancel_training_targets_exact_policy(
 
     _mock_client.cancel_training.assert_awaited_once_with("dt-1", "policy-1")
     assert result["status"] == "cancelled"
-
-
-@pytest.mark.asyncio
-async def test_retry_training_preserves_policy_and_snapshot(
-    _mock_client: AsyncMock,
-) -> None:
-    result = await retry_training("dt-1", "policy-1")
-
-    _mock_client.retry_training.assert_awaited_once_with("dt-1", "policy-1")
-    assert result["policy_id"] == "policy-1"
-    assert result["dataset"]["manifest_id"] == "sha256:test"
 
 
 # ── Introspection tools ────────────────────────────────────────────────

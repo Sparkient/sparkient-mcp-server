@@ -38,25 +38,21 @@ class RuleDefinition(BaseModel):
 async def list_decision_types(
     page: Annotated[
         int,
-        Field(description="Page number (1-indexed)."),
+        Field(ge=1, description="Page number (1-indexed)."),
     ] = 1,
     page_size: Annotated[
         int,
-        Field(description="Results per page (max 100)."),
+        Field(ge=1, le=100, description="Results per page (max 100)."),
     ] = 20,
-    search: Annotated[
-        str | None,
-        Field(description="Optional text to filter by name or description."),
-    ] = None,
 ) -> dict[str, Any]:
     """List all decision types in your organisation.
 
     Returns a paginated list of decision types and their active configuration.
     ``model_deployed`` reports whether a compatible trained policy is currently
-    deployed. Search is case-insensitive across name and description.
+    deployed.
     """
     client = get_client()
-    return await client.list_decision_types(page, page_size, search)
+    return await client.list_decision_types(page, page_size)
 
 
 @mcp.tool(

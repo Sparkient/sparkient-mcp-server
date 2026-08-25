@@ -184,21 +184,6 @@ async def test_example_methods_preserve_rest_array_responses(
 
 
 @pytest.mark.asyncio
-async def test_retry_training_posts_to_same_policy() -> None:
-    client = SparkientClient("https://api.example.com", "test-key")
-    client._request = AsyncMock(return_value={"policy_id": "policy-1", "status": "training"})  # type: ignore[method-assign]
-
-    result = await client.retry_training("dt-1", "policy-1")
-
-    client._request.assert_awaited_once_with(
-        "POST",
-        "/decision-types/dt-1/policies/policy-1/retry",
-    )
-    assert result["policy_id"] == "policy-1"
-    await client.close()
-
-
-@pytest.mark.asyncio
 async def test_edge_export_instructions_do_not_fetch_or_embed_the_bundle() -> None:
     client = SparkientClient("https://api.example.com/", "test-key")
     client._http.request = AsyncMock()  # type: ignore[method-assign]
@@ -363,16 +348,16 @@ class TestDecisionPayloads:
         await client._http.aclose()
 
     @pytest.mark.asyncio
-    async def test_list_types_forwards_search_query(self) -> None:
+    async def test_list_types_forwards_pagination(self) -> None:
         client = SparkientClient("https://api.example.com", "c" * 64)
         client._request = AsyncMock(return_value={"items": [], "total": 0})  # type: ignore[method-assign]
 
-        await client.list_decision_types(page=2, page_size=10, search="risk routing")
+        await client.list_decision_types(page=2, page_size=10)
 
         client._request.assert_awaited_once_with(  # type: ignore[attr-defined]
             "GET",
             "/decision-types",
-            params={"page": 2, "page_size": 10, "search": "risk routing"},
+            params={"page": 2, "page_size": 10},
         )
         await client._http.aclose()
 

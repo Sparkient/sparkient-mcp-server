@@ -320,12 +320,9 @@ class SparkientClient:
         self,
         page: int = 1,
         page_size: int = 20,
-        search: str | None = None,
     ) -> dict[str, Any]:
-        """List decision types with optional search and pagination."""
+        """List decision types with pagination."""
         params: dict[str, Any] = {"page": page, "page_size": page_size}
-        if search is not None:
-            params["search"] = search
         return await self._request("GET", "/decision-types", params=params)
 
     async def get_decision_type(self, decision_type_id: str) -> dict[str, Any]:
@@ -427,17 +424,6 @@ class SparkientClient:
         return await self._request(
             "POST",
             f"/decision-types/{decision_type_id}/policies/{policy_id}/cancel",
-        )
-
-    async def retry_training(
-        self,
-        decision_type_id: str,
-        policy_id: str,
-    ) -> dict[str, Any]:
-        """Retry a recoverable failure against the same immutable snapshot."""
-        return await self._request(
-            "POST",
-            f"/decision-types/{decision_type_id}/policies/{policy_id}/retry",
         )
 
     # ------------------------------------------------------------------

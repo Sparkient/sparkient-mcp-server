@@ -31,8 +31,8 @@ async def train_model(
 ) -> dict[str, Any]:
     """Trigger model training for a decision type.
 
-    Training runs asynchronously against an immutable snapshot and requires at
-    least 38 labelled examples for every configured option. The pipeline
+    Training runs asynchronously and requires at least 38 labelled examples for
+    every configured option. The pipeline
     prepares features, fine-tunes the task-specific text model, trains and
     evaluates the classifier, exports inference artifacts, and optionally
     deploys the resulting policy.
@@ -69,8 +69,8 @@ async def get_training_status(
     while status is ``training``, ``stopping``, or ``cancelling``. ``stopping``
     retains the organisation slot until the exact stale execution is terminal.
 
-    The response is authoritative for the current stage and includes an
-    immutable dataset summary; this tool does not generate or relabel examples.
+    The response is authoritative for the current stage; this tool does not
+    generate or relabel examples.
     """
     client = get_client()
     return await client.get_training_progress(decision_type_id, policy_id)
@@ -103,24 +103,3 @@ async def cancel_training(
     """
     client = get_client()
     return await client.cancel_training(decision_type_id, policy_id)
-
-
-@mcp.tool(
-    annotations=ToolAnnotations(
-        readOnlyHint=False,
-        destructiveHint=False,
-        idempotentHint=False,
-        openWorldHint=True,
-    ),
-)
-async def retry_training(
-    decision_type_id: Annotated[str, Field(description="UUID of the decision type.")],
-    policy_id: Annotated[str, Field(description="UUID of the failed, retryable policy.")],
-) -> dict[str, Any]:
-    """Retry a recoverable failure against the same immutable snapshot.
-
-    Safe checkpoints and the policy version are reused, and a successful retry
-    cannot create a second completion charge.
-    """
-    client = get_client()
-    return await client.retry_training(decision_type_id, policy_id)
