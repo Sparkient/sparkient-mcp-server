@@ -13,24 +13,47 @@ from sparkient_mcp.server import mcp
 async def list_all_decision_types() -> str:
     """List all decision types in the organisation.
 
-    Returns a JSON array of decision type summaries with name,
-    description, status, and option labels.  Agents can use this
+    Returns a JSON array of decision type summaries with name, description,
+    deployment state, and active-version option labels. Agents can use this
     to discover what decisions are available.
     """
     client = get_client()
-    data: dict[str, Any] = await client.list_decision_types(page_size=100)
-    if "error" in data:
-        return json.dumps(data, indent=2)
+    items: list[dict[str, Any]] = []
+    page = 1
+    while True:
+        data: dict[str, Any] = await client.list_decision_types(
+            page=page,
+            page_size=100,
+        )
+        if "error" in data:
+            return json.dumps(data, indent=2)
 
-    # Extract just the items for a cleaner resource
-    items = data.get("items", data.get("data", []))
+        page_items = data.get("items", data.get("data", []))
+        if not isinstance(page_items, list):
+            page_items = []
+        items.extend(item for item in page_items if isinstance(item, dict))
+
+        pages = data.get("pages")
+        total = data.get("total")
+        if isinstance(pages, int):
+            has_next_page = page < pages
+        else:
+            has_next_page = (
+                isinstance(total, int)
+                and len(items) < total
+                and bool(page_items)
+            )
+        if not has_next_page:
+            break
+        page += 1
+
     summaries = [
         {
             "id": item.get("id"),
             "name": item.get("name"),
             "description": item.get("description"),
-            "status": item.get("status"),
-            "options": item.get("options", []),
+            "model_deployed": item.get("model_deployed", False),
+            "options": (item.get("active_version") or {}).get("options", []),
         }
         for item in items
     ]
@@ -41,8 +64,9 @@ async def list_all_decision_types() -> str:
 async def get_decision_type_by_id(decision_type_id: str) -> str:
     """Get the full configuration of a specific decision type by UUID.
 
-    Returns the complete schema including options, reason codes,
-    rules, input schema, and training status.
+    Returns the configuration including options, reason codes, rules, input
+    schema, and whether a compatible model is deployed. It does not include
+    live training progress.
 
     Args:
         decision_type_id: UUID returned by the list resource or list tool.

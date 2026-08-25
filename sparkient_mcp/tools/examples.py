@@ -27,6 +27,8 @@ async def add_examples(
     examples: Annotated[
         list[dict[str, Any]],
         Field(
+            min_length=1,
+            max_length=500,
             description=(
                 "List of labelled examples. Each should have: "
                 "input_payload (dict) and expected_decision (str)."
@@ -38,8 +40,8 @@ async def add_examples(
 
     More representative examples can improve model accuracy. Training requires
     at least 38 labelled examples per option, with balanced class distribution.
-    A decision type can store
-    up to 5,000 examples; capacity errors report the exact remaining space.
+    A decision type can store up to 5,000 examples. An upload batch that would
+    exceed that limit fails without partially adding the batch.
     """
     client = get_client()
     return await client.add_examples(decision_type_id, examples)
@@ -60,16 +62,16 @@ async def generate_examples(
     ],
     count: Annotated[
         int,
-        Field(description="Number of examples to generate (1-50)."),
+        Field(ge=1, le=50, description="Number of examples to generate (1-50)."),
     ] = 10,
 ) -> list[dict[str, Any]] | dict[str, Any]:
     """Generate synthetic training examples using AI.
 
     Uses the decision type's description and options to generate
-    realistic labelled examples. Good for bootstrapping a new
-    decision type before you have real data. Generation is all-or-nothing:
-    Sparkient returns the remaining capacity instead of silently creating
-    fewer examples than requested.
+    realistic labelled examples. Good for bootstrapping a new decision type
+    before you have real data. Near the 5,000-example storage limit, Sparkient
+    may create only the remaining number of examples rather than the full
+    requested count.
     """
     client = get_client()
     return await client.generate_examples(decision_type_id, count)
